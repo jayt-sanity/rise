@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
-import { hasSupabase, loadPersistedJournal, loadPersistedQuotes, savePersistedJournal, savePersistedQuote, signInWithEmail, signOutUser, signUpWithEmail, supabase } from "./lib/supabase";
+import { hasSupabase, loadPersistedJournal, loadPersistedQuotes, savePersistedJournal, savePersistedQuote } from "./lib/supabase";
 import {
   BarChartIcon,
   CalendarIcon,
@@ -54,42 +54,9 @@ export default function Prototype() {
   const [detail, setDetail] = useState(false);
   const [draft, setDraft] = useState(defaultDraft);
   const [saved, setSaved] = useState(false);
-  const [authReady, setAuthReady] = useState(!hasSupabase);
-  const [signedIn, setSignedIn] = useState(!hasSupabase);
   const keyboard = { hide: () => undefined };
 
   useEffect(() => {
-    if (!hasSupabase) {
-      setAuthReady(true);
-      setSignedIn(true);
-      return;
-    }
-
-    let isMounted = true;
-
-    const syncSession = async () => {
-      const { data: { session } } = await supabase!.auth.getSession();
-      if (!isMounted) return;
-      setSignedIn(Boolean(session?.user));
-      setAuthReady(true);
-    };
-
-    void syncSession();
-
-    const { data: { subscription } } = supabase!.auth.onAuthStateChange((_event, session) => {
-      if (!isMounted) return;
-      setSignedIn(Boolean(session?.user));
-    });
-
-    return () => {
-      isMounted = false;
-      subscription.unsubscribe();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!signedIn) return;
-
     let isMounted = true;
 
     void (async () => {
@@ -107,7 +74,7 @@ export default function Prototype() {
     return () => {
       isMounted = false;
     };
-  }, [signedIn]);
+  }, []);
 
   const navigate = (next: Tab) => {
     keyboard.hide();
@@ -132,14 +99,6 @@ export default function Prototype() {
     window.setTimeout(() => setSaved(false), 2600);
   };
 
-  if (!authReady) {
-    return <div className="constellation-app"><div className="app-screen constellation-scroll web-scroll"><main className="screen-content"><section className="simple-page page-with-nav"><p className="eyebrow">RISE</p><h1>Loading your space…</h1></section></main></div></div>;
-  }
-
-  if (hasSupabase && !signedIn) {
-    return <AuthScreen />;
-  }
-
   return (
     <div className="constellation-app">
       <div className="app-screen constellation-scroll web-scroll">
@@ -159,7 +118,7 @@ export default function Prototype() {
           ) : tab === "track" ? (
             <TrackScreen onSettings={() => setTab("settings")} />
           ) : (
-            <SettingsScreen onSignOut={async () => { await signOutUser(); setSignedIn(false); }} />
+            <SettingsScreen />
           )}
         </main>
       </div>
@@ -377,53 +336,8 @@ function ReflectionsScreen({ entries, mode, setMode, mood, onView }: { entries: 
   </section>;
 }
 
-function SettingsScreen({ onSignOut }: { onSignOut: () => void }) {
-  return <section className="settings-screen page-with-nav simple-page"><p className="eyebrow">Your space, your rules</p><h1>Settings</h1><div className="settings-list"><button><span><strong>Journal reminder</strong><small>Every day at 9:00 PM</small></span><ChevronRightIcon /></button><button><span><strong>Privacy lock</strong><small>Face ID is on</small></span><ChevronRightIcon /></button><button><span><strong>Reflection summaries</strong><small>Weekly and monthly</small></span><ChevronRightIcon /></button><button><span><strong>Export your journal</strong><small>PDF or text</small></span><ChevronRightIcon /></button><button onClick={onSignOut}><span><strong>Sign out</strong><small>End your current session</small></span><ChevronRightIcon /></button></div></section>;
-}
-
-function AuthScreen() {
-  const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  const handleSubmit = async () => {
-    if (!email.trim() || !password.trim()) {
-      setError("Enter both your email and password.");
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-
-    try {
-      if (mode === "sign-in") {
-        await signInWithEmail(email.trim(), password);
-      } else {
-        await signUpWithEmail(email.trim(), password);
-      }
-      window.location.reload();
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Unable to sign in right now.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return <section className="settings-screen page-with-nav simple-page"><p className="eyebrow">Welcome to RISE</p><h1>{mode === "sign-in" ? "Sign in" : "Create account"}</h1><div className="settings-list" style={{ gap: 12 }}>
-    <label style={{ display: "grid", gap: 6 }}>
-      <span style={{ fontSize: 12, color: "#a9a4d0" }}>Email</span>
-      <input aria-label="Email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" style={{ borderRadius: 12, padding: "12px 14px", border: "1px solid rgba(174,163,245,0.3)", background: "rgba(21,21,33,0.7)", color: "#f5f2ff" }} />
-    </label>
-    <label style={{ display: "grid", gap: 6 }}>
-      <span style={{ fontSize: 12, color: "#a9a4d0" }}>Password</span>
-      <input aria-label="Password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 6 characters" style={{ borderRadius: 12, padding: "12px 14px", border: "1px solid rgba(174,163,245,0.3)", background: "rgba(21,21,33,0.7)", color: "#f5f2ff" }} />
-    </label>
-    {error && <p style={{ color: "#ffb4ad", margin: 0, fontSize: 12 }}>{error}</p>}
-    <button className="primary" onClick={handleSubmit} disabled={loading}>{loading ? "Working…" : mode === "sign-in" ? "Sign in" : "Create account"}</button>
-    <button onClick={() => setMode(mode === "sign-in" ? "sign-up" : "sign-in")}>{mode === "sign-in" ? "Need an account? Sign up" : "Already have an account? Sign in"}</button>
-  </div></section>;
+function SettingsScreen() {
+  return <section className="settings-screen page-with-nav simple-page"><p className="eyebrow">Your space, your rules</p><h1>Settings</h1><div className="settings-list"><button><span><strong>Journal reminder</strong><small>Every day at 9:00 PM</small></span><ChevronRightIcon /></button><button><span><strong>Privacy lock</strong><small>Face ID is on</small></span><ChevronRightIcon /></button><button><span><strong>Reflection summaries</strong><small>Weekly and monthly</small></span><ChevronRightIcon /></button><button><span><strong>Export your journal</strong><small>PDF or text</small></span><ChevronRightIcon /></button></div></section>;
 }
 
 type Habit = { id: number; name: string; detail: string; tone: string };
