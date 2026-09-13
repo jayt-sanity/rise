@@ -19,6 +19,40 @@ const STORAGE_KEYS = {
   quotes: "rise:prototype:quotes",
 };
 
+export async function getActiveUserId(): Promise<string> {
+  if (!supabase) return DEMO_USER_ID;
+
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) return DEMO_USER_ID;
+  return user.id;
+}
+
+export async function signInWithEmail(email: string, password: string) {
+  if (!supabase) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  return data.user;
+}
+
+export async function signUpWithEmail(email: string, password: string) {
+  if (!supabase) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  const { data, error } = await supabase.auth.signUp({ email, password });
+  if (error) throw error;
+  return data.user;
+}
+
+export async function signOutUser() {
+  if (!supabase) return;
+  const { error } = await supabase.auth.signOut();
+  if (error) throw error;
+}
+
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
@@ -47,11 +81,13 @@ function writeStorage<T>(key: string, value: T) {
 }
 
 export async function loadPersistedJournal(): Promise<JournalRecord | null> {
+  const userId = await getActiveUserId();
+
   if (supabase) {
     const { data, error } = await supabase
       .from("journal_entries")
       .select("mood,draft,created_at")
-      .eq("user_id", DEMO_USER_ID)
+      .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -69,8 +105,9 @@ export async function loadPersistedJournal(): Promise<JournalRecord | null> {
 }
 
 export async function savePersistedJournal(entry: JournalRecord) {
+  const userId = await getActiveUserId();
   const payload = {
-    user_id: DEMO_USER_ID,
+    user_id: userId,
     mood: entry.mood,
     draft: entry.draft,
     created_at: new Date().toISOString(),
@@ -88,11 +125,13 @@ export async function savePersistedJournal(entry: JournalRecord) {
 }
 
 export async function loadPersistedQuotes(): Promise<QuoteRecord[]> {
+  const userId = await getActiveUserId();
+
   if (supabase) {
     const { data, error } = await supabase
       .from("saved_quotes")
       .select("quote_text,quote_source,created_at")
-      .eq("user_id", DEMO_USER_ID)
+      .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
     if (!error && data) {
@@ -108,8 +147,9 @@ export async function loadPersistedQuotes(): Promise<QuoteRecord[]> {
 }
 
 export async function savePersistedQuote(entry: QuoteRecord) {
+  const userId = await getActiveUserId();
   const payload = {
-    user_id: DEMO_USER_ID,
+    user_id: userId,
     quote_text: entry.text,
     quote_source: entry.source,
     created_at: new Date().toISOString(),
