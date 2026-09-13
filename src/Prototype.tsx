@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
+import { loadPersistedJournal, loadPersistedQuotes, savePersistedJournal, savePersistedQuote } from "./lib/supabase";
 import {
   BarChartIcon,
   CalendarIcon,
@@ -42,6 +43,8 @@ const navItems: { id: Tab; label: string; icon: typeof HomeIcon }[] = [
   { id: "reflections", label: "Progress", icon: CheckCircledIcon },
 ];
 
+const defaultDraft = "Today felt quieter than usual. I gave myself room to pause, and that helped me notice what I actually needed.";
+
 export default function Prototype() {
   const [tab, setTab] = useState<Tab>("today");
   const [mood, setMood] = useState<Mood>("good");
@@ -49,9 +52,29 @@ export default function Prototype() {
   const [calendarMode, setCalendarMode] = useState<"activity" | "mood">("mood");
   const [editing, setEditing] = useState(false);
   const [detail, setDetail] = useState(false);
-  const [draft, setDraft] = useState("Today felt quieter than usual. I gave myself room to pause, and that helped me notice what I actually needed.");
+  const [draft, setDraft] = useState(defaultDraft);
   const [saved, setSaved] = useState(false);
   const keyboard = { hide: () => undefined };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    void (async () => {
+      const savedJournal = await loadPersistedJournal();
+      if (!isMounted || !savedJournal) return;
+
+      if (savedJournal.mood in moodMeta) {
+        setMood(savedJournal.mood as Mood);
+      }
+      if (savedJournal.draft) {
+        setDraft(savedJournal.draft);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const navigate = (next: Tab) => {
     keyboard.hide();
@@ -66,9 +89,10 @@ export default function Prototype() {
     setEditing(true);
   };
 
-  const saveEntry = () => {
+  const saveEntry = async () => {
     keyboard.hide();
     setEntries((current) => ({ ...current, 13: mood }));
+    await savePersistedJournal({ mood, draft });
     setEditing(false);
     setSaved(true);
     setTab("calendar");
@@ -233,6 +257,20 @@ function JournalScreen({ mood, draft, onOpen }: { mood: Mood; draft: string; onO
   const [quoteText, setQuoteText] = useState("");
   const [quoteSource, setQuoteSource] = useState("");
   const keyboard = { hide: () => undefined };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    void (async () => {
+      const savedQuotes = await loadPersistedQuotes();
+      if (!isMounted || !savedQuotes.length) return;
+      setQuotes(savedQuotes.map((quote) => ({ text: quote.text, source: quote.source })));
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
   const tagData = [
     { name: "confidence", count: 12, trend: "+4", weeks: [1, 2, 1, 3, 2, 4], tone: "purple" },
     { name: "rest", count: 9, trend: "+2", weeks: [1, 1, 2, 1, 2, 3], tone: "mint" },
@@ -243,9 +281,11 @@ function JournalScreen({ mood, draft, onOpen }: { mood: Mood; draft: string; onO
   ];
   const filteredTags = tagData.filter((tag) => tag.name.includes(query.trim().toLowerCase()));
   const changeView = (next: "entries" | "tags" | "quotes") => { keyboard.hide(); setView(next); setQuery(""); setAddingQuote(false); };
-  const addQuote = () => {
+  const addQuote = async () => {
     if (!quoteText.trim()) return;
-    setQuotes((current) => [{ text: quoteText.trim(), source: quoteSource.trim() || "Personal quote" }, ...current]);
+    const nextQuote = { text: quoteText.trim(), source: quoteSource.trim() || "Personal quote" };
+    setQuotes((current) => [nextQuote, ...current]);
+    await savePersistedQuote(nextQuote);
     setQuoteText(""); setQuoteSource(""); setAddingQuote(false); keyboard.hide();
   };
 
